@@ -97,14 +97,14 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
             }
             catch (InvalidOperationException)
             {
-                _logger?.LogWarning("ExhaustiveShuffle exhausted, falling back to pool random.");
+                _logger?.LogInformation("ExhaustiveShuffle exhausted, falling back to pool random.");
                 return (await _pool.GetAssets(1)).FirstOrDefault();
             }
         }
 
         if (_generalSettings.ExhaustiveShuffle && isAllAssets)
         {
-            _logger?.LogWarning("ExhaustiveShuffle requested, but AllAssetsPool delivers SearchRandom → falling back.");
+            _logger?.LogInformation("ExhaustiveShuffle requested, but AllAssetsPool delivers SearchRandom → falling back.");
         }
 
         var random = (await _pool.GetAssets(1)).FirstOrDefault();
@@ -122,12 +122,12 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
                 try
                 {
                     var asset = _exhaustiveStrategy.Next(_rotationKey);
-                    _logger?.LogDebug("Batch ExhaustiveShuffle selected asset {AssetId}", asset.Id);
+                    _logger?.LogInformation("Batch ExhaustiveShuffle selected asset {AssetId}", asset.Id);
                     list.Add(asset);
                 }
                 catch (InvalidOperationException)
                 {
-                    _logger?.LogWarning("ExhaustiveShuffle exhausted while filling batch.");
+                    _logger?.LogInformation("ExhaustiveShuffle exhausted while filling batch.");
                     break;
                 }
             }
@@ -164,9 +164,11 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
                 {
                     var fs = File.OpenRead(file);
                     var ex = Path.GetExtension(file);
+                    _logger?.LogInformation("Serving cached image for {AssetId}", id);
                     return (Path.GetFileName(file), $"image/{ex}", fs);
                 }
 
+                _logger?.LogInformation("Cached image expired for {AssetId}, deleting.", id);
                 File.Delete(file);
             }
         }
@@ -193,14 +195,19 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
             var fs = File.Create(filePath);
             await stream.CopyToAsync(fs);
             fs.Position = 0;
+            _logger?.LogInformation("Downloaded and cached new image {AssetId}", id);
             return (Path.GetFileName(filePath), contentType, fs);
         }
 
+        _logger?.LogInformation("Serving streamed image for {AssetId}", id);
         return (fileName, contentType, data.Stream);
     }
 
-    public Task SendWebhookNotification(IWebhookNotification notification) =>
-        WebhookHelper.SendWebhookNotification(notification, _generalSettings.Webhook);
+    public Task SendWebhookNotification(IWebhookNotification notification)
+    {
+        _logger?.LogInformation("Sending webhook notification to {Webhook}", _generalSettings.Webhook);
+        return WebhookHelper.SendWebhookNotification(notification, _generalSettings.Webhook);
+    }
 
     public override string ToString() => $"Account Pool [{_immichApi.BaseUrl}]";
 }
