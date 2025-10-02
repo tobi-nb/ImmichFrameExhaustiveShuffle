@@ -3,6 +3,10 @@ using ImmichFrame.Core.Exceptions;
 using ImmichFrame.Core.Helpers;
 using ImmichFrame.Core.Interfaces;
 using ImmichFrame.Core.Logic.Pool;
+using System.Collections.Generic;
+using System.Linq;
+using ImmichFrame.Core.Logic.Rotation;
+
 
 namespace ImmichFrame.Core.Logic;
 
@@ -12,6 +16,8 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
     private readonly IApiCache _apiCache;
     private readonly IAssetPool _pool;
     private readonly ImmichApi _immichApi;
+	private readonly ExhaustiveRotationStrategy<AssetResponseDto> _exhaustiveStrategy;
+	private readonly string _rotationKey;
     private readonly string _downloadLocation = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ImageCache");
 
     public PooledImmichFrameLogic(IAccountSettings accountSettings, IGeneralSettings generalSettings, IHttpClientFactory httpClientFactory)
@@ -26,6 +32,18 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
 
         _apiCache = new ApiCache(RefreshInterval(generalSettings.RefreshAlbumPeopleInterval));
         _pool = BuildPool(accountSettings);
+		_rotationKey = AccountSettings.ImmichServerUrl ?? "default";
+
+		IEnumerable<AssetResponseDto> CandidatesProvider()
+		{
+			var total = _pool.GetAssetCount().GetAwaiter().GetResult();
+			if (total <= 0) return Enumerable.Empty<AssetResponseDto>();
+			var list = _pool.GetAssets((int)total).GetAwaiter().GetResult();
+			return list ?? Enumerable.Empty<AssetResponseDto>();
+		}
+
+		_exhaustiveStrategy = new ExhaustiveRotationStrategy<AssetResponseDto>(CandidatesProvider);
+
     }
 
     private static TimeSpan RefreshInterval(int hours)
@@ -57,15 +75,30 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
         return new MultiAssetPool(pools);
     }
 
-    public async Task<AssetResponseDto?> GetNextAsset()
-    {
-        return (await _pool.GetAssets(1)).FirstOrDefault();
-    }
+	public async Task<AssetResponseDto?> GetNextAsset()
+	{
+		try
+		{
+			return _exhaustiveStrategy.Next(_rotationKey);
+		}
+		catch (InvalidOperationException)
+		{
+			// Keine Kandidaten → fall back
+			return (await _pool.GetAssets(1)).FirstOrDefault();
+		}
+	}
 
-    public Task<IEnumerable<AssetResponseDto>> GetAssets()
-    {
-        return _pool.GetAssets(25);
-    }
+	public async Task<IEnumerable<AssetResponseDto>> GetAssets()
+	{
+		var list = new List<AssetResponseDto>(25);
+		for (int i = 0; i < 25; i++)
+		{
+			try { list.Add(_exhaustiveStrategy.Next(_rotationKey)); }
+			catch (InvalidOperationException) { break; }
+		}
+		if (list.Count == 0) return await _pool.GetAssets(25);
+		return list;
+	}
 
     public Task<AssetResponseDto> GetAssetInfoById(Guid assetId) => _immichApi.GetAssetInfoAsync(assetId, null);
 
