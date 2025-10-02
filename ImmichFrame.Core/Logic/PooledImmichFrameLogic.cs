@@ -112,14 +112,14 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
         return random;
     }
 
-    public async Task<IEnumerable<AssetResponseDto>> GetAssets()
-    {
-        if (_generalSettings.ExhaustiveShuffle)
-        {
-            var list = new List<AssetResponseDto>(25);
-            var seen = new HashSet<string>();
+	public async Task<IEnumerable<AssetResponseDto>> GetAssets()
+	{
+		if (_generalSettings.ExhaustiveShuffle)
+		{
+			var uniqueAssets = new List<AssetResponseDto>();
+			var seen = new HashSet<string>();
 
-			for (int i = 0; i < 25; i++)
+			while (uniqueAssets.Count < 25)
 			{
 				try
 				{
@@ -127,30 +127,35 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
 
 					if (seen.Add(asset.Id))
 					{
+						uniqueAssets.Add(asset);
 						_logger?.LogInformation("Batch ExhaustiveShuffle selected unique asset {AssetId}", asset.Id);
-						list.Add(asset);
-					}
-					else
-					{
-						_logger?.LogDebug("Skipped duplicate asset {AssetId} in same batch", asset.Id);
-						i--; // Versuche diese Position erneut
 					}
 				}
 				catch (InvalidOperationException)
 				{
-					_logger?.LogInformation("ExhaustiveShuffle exhausted after {Count} unique assets in batch", list.Count);
+					if (uniqueAssets.Count == 0)
+					{
+						return await _pool.GetAssets(25);
+					}
+
+					while (uniqueAssets.Count < 25)
+					{
+						var asset = uniqueAssets[uniqueAssets.Count % seen.Count];
+						uniqueAssets.Add(asset);
+						_logger?.LogDebug("Reusing asset {AssetId} to fill batch", asset.Id);
+					}
 					break;
 				}
 			}
 
-            if (list.Count == 0) return await _pool.GetAssets(25);
-            return list;
-        }
-        else
-        {
-            return await _pool.GetAssets(25);
-        }
-    }
+			return uniqueAssets;
+		}
+		else
+		{
+			return await _pool.GetAssets(25);
+		}
+	}
+
 
     public Task<AssetResponseDto> GetAssetInfoById(Guid assetId) => _immichApi.GetAssetInfoAsync(assetId, null);
 
