@@ -77,27 +77,40 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
 
 	public async Task<AssetResponseDto?> GetNextAsset()
 	{
-		try
+		if (_generalSettings.ExhaustiveShuffle)
 		{
-			return _exhaustiveStrategy.Next(_rotationKey);
+			try
+			{
+				return _exhaustiveStrategy.Next(_rotationKey);
+			}
+			catch (InvalidOperationException)
+			{
+				return (await _pool.GetAssets(1)).FirstOrDefault();
+			}
 		}
-		catch (InvalidOperationException)
+		else
 		{
-			// Keine Kandidaten → fall back
 			return (await _pool.GetAssets(1)).FirstOrDefault();
 		}
 	}
 
 	public async Task<IEnumerable<AssetResponseDto>> GetAssets()
 	{
-		var list = new List<AssetResponseDto>(25);
-		for (int i = 0; i < 25; i++)
+		if (_generalSettings.ExhaustiveShuffle)
 		{
-			try { list.Add(_exhaustiveStrategy.Next(_rotationKey)); }
-			catch (InvalidOperationException) { break; }
+			var list = new List<AssetResponseDto>(25);
+			for (int i = 0; i < 25; i++)
+			{
+				try { list.Add(_exhaustiveStrategy.Next(_rotationKey)); }
+				catch (InvalidOperationException) { break; }
+			}
+			if (list.Count == 0) return await _pool.GetAssets(25);
+			return list;
 		}
-		if (list.Count == 0) return await _pool.GetAssets(25);
-		return list;
+		else
+		{
+			return await _pool.GetAssets(25);
+		}
 	}
 
     public Task<AssetResponseDto> GetAssetInfoById(Guid assetId) => _immichApi.GetAssetInfoAsync(assetId, null);
