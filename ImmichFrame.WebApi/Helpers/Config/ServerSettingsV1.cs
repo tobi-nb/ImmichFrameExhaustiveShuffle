@@ -52,6 +52,7 @@ public class ServerSettingsV1 : IConfigSettable
     public bool ImagePan { get; set; } = false;
     public bool ImageFill { get; set; } = false;
     public string Layout { get; set; } = "splitview";
+	public bool ExhaustiveShuffle => false;
 }
 
 /// <summary>
