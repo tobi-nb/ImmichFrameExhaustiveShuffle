@@ -116,60 +116,40 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
 	{
 		if (_generalSettings.ExhaustiveShuffle)
 		{
-			var uniqueAssets = new List<AssetResponseDto>();
-			var seen = new HashSet<string>();
+			var batch = new List<AssetResponseDto>(25);
 
-			// Versuche, bis zu 25 eindeutige Assets zu ziehen
-			while (uniqueAssets.Count < 25)
+			// hole alle verfügbaren Kandidaten (einmalig)
+			var total = await _pool.GetAssetCount();
+			var allAssets = (await _pool.GetAssets((int)total)).ToList();
+
+			if (!allAssets.Any())
+				return Enumerable.Empty<AssetResponseDto>();
+
+			// mische durch für Zufall
+			var rng = new Random();
+			for (int i = allAssets.Count - 1; i > 0; i--)
 			{
-				try
-				{
-					var asset = _exhaustiveStrategy.Next(_rotationKey);
-					if (seen.Add(asset.Id))
-					{
-						uniqueAssets.Add(asset);
-						_logger?.LogInformation("Batch ExhaustiveShuffle selected unique asset {AssetId}", asset.Id);
-					}
-				}
-				catch (InvalidOperationException)
-				{
-					_logger?.LogInformation("ExhaustiveShuffle exhausted after {Count} unique assets", uniqueAssets.Count);
-					break;
-				}
+				int j = rng.Next(i + 1);
+				(allAssets[i], allAssets[j]) = (allAssets[j], allAssets[i]);
 			}
 
-			// Wenn weniger als 25 → auffüllen mit random shuffle aus den vorhandenen
-			if (uniqueAssets.Count > 0 && uniqueAssets.Count < 25)
+			// jetzt auffüllen bis 25, indem wir durch die Liste "rotieren"
+			int index = 0;
+			while (batch.Count < 25)
 			{
-				var rng = new Random();
-				while (uniqueAssets.Count < 25)
-				{
-					// mische die bisherigen eindeutigen Assets
-					var shuffled = seen.OrderBy(_ => rng.Next()).ToList();
-					foreach (var id in shuffled)
-					{
-						var asset = uniqueAssets.First(a => a.Id == id);
-						uniqueAssets.Add(asset);
-						_logger?.LogInformation("Reusing (shuffled) asset {AssetId} to fill batch", asset.Id);
-
-						if (uniqueAssets.Count >= 25)
-							break;
-					}
-				}
+				var asset = allAssets[index % allAssets.Count];
+				batch.Add(asset);
+				_logger?.LogInformation("Batch ExhaustiveShuffle selected asset {AssetId}", asset.Id);
+				index++;
 			}
 
-			_logger?.LogInformation("Returning batch of {Count} assets", uniqueAssets.Count);
-			return uniqueAssets;
+			return batch;
 		}
 		else
 		{
-			var randomBatch = await _pool.GetAssets(25);
-			_logger?.LogInformation("Returning random batch of {Count} assets", randomBatch.Count());
-			return randomBatch;
+			return await _pool.GetAssets(25);
 		}
 	}
-
-
 
     public Task<AssetResponseDto> GetAssetInfoById(Guid assetId) => _immichApi.GetAssetInfoAsync(assetId, null);
 
