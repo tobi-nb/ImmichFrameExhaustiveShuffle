@@ -77,6 +77,8 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
 
 	public async Task<AssetResponseDto?> GetNextAsset()
 	{
+		_logger?.LogInformation("ExhaustiveShuffle={flag}, poolType={type}", _generalSettings.ExhaustiveShuffle, _pool.GetType().Name);
+
 		if (_generalSettings.ExhaustiveShuffle)
 		{
 			try
