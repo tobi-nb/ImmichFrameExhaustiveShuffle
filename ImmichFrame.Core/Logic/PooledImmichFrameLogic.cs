@@ -119,12 +119,12 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
 			var uniqueAssets = new List<AssetResponseDto>();
 			var seen = new HashSet<string>();
 
+			// Versuche, bis zu 25 eindeutige Assets zu ziehen
 			while (uniqueAssets.Count < 25)
 			{
 				try
 				{
 					var asset = _exhaustiveStrategy.Next(_rotationKey);
-
 					if (seen.Add(asset.Id))
 					{
 						uniqueAssets.Add(asset);
@@ -133,28 +133,42 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
 				}
 				catch (InvalidOperationException)
 				{
-					if (uniqueAssets.Count == 0)
-					{
-						return await _pool.GetAssets(25);
-					}
-
-					while (uniqueAssets.Count < 25)
-					{
-						var asset = uniqueAssets[uniqueAssets.Count % seen.Count];
-						uniqueAssets.Add(asset);
-						_logger?.LogDebug("Reusing asset {AssetId} to fill batch", asset.Id);
-					}
+					_logger?.LogInformation("ExhaustiveShuffle exhausted after {Count} unique assets", uniqueAssets.Count);
 					break;
 				}
 			}
 
+			// Wenn weniger als 25 → auffüllen mit random shuffle aus den vorhandenen
+			if (uniqueAssets.Count > 0 && uniqueAssets.Count < 25)
+			{
+				var rng = new Random();
+				while (uniqueAssets.Count < 25)
+				{
+					// mische die bisherigen eindeutigen Assets
+					var shuffled = seen.OrderBy(_ => rng.Next()).ToList();
+					foreach (var id in shuffled)
+					{
+						var asset = uniqueAssets.First(a => a.Id == id);
+						uniqueAssets.Add(asset);
+						_logger?.LogInformation("Reusing (shuffled) asset {AssetId} to fill batch", asset.Id);
+
+						if (uniqueAssets.Count >= 25)
+							break;
+					}
+				}
+			}
+
+			_logger?.LogInformation("Returning batch of {Count} assets", uniqueAssets.Count);
 			return uniqueAssets;
 		}
 		else
 		{
-			return await _pool.GetAssets(25);
+			var randomBatch = await _pool.GetAssets(25);
+			_logger?.LogInformation("Returning random batch of {Count} assets", randomBatch.Count());
+			return randomBatch;
 		}
 	}
+
 
 
     public Task<AssetResponseDto> GetAssetInfoById(Guid assetId) => _immichApi.GetAssetInfoAsync(assetId, null);
