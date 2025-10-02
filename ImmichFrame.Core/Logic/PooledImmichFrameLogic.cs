@@ -117,20 +117,32 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
         if (_generalSettings.ExhaustiveShuffle)
         {
             var list = new List<AssetResponseDto>(25);
+            var seen = new HashSet<Guid>();
+
             for (int i = 0; i < 25; i++)
             {
                 try
                 {
                     var asset = _exhaustiveStrategy.Next(_rotationKey);
-                    _logger?.LogInformation("Batch ExhaustiveShuffle selected asset {AssetId}", asset.Id);
-                    list.Add(asset);
+
+                    if (seen.Add(asset.Id))
+                    {
+                        _logger?.LogInformation("Batch ExhaustiveShuffle selected unique asset {AssetId}", asset.Id);
+                        list.Add(asset);
+                    }
+                    else
+                    {
+                        _logger?.LogDebug("Skipped duplicate asset {AssetId} in same batch", asset.Id);
+                        i--; // Versuche diese Position erneut
+                    }
                 }
                 catch (InvalidOperationException)
                 {
-                    _logger?.LogInformation("ExhaustiveShuffle exhausted while filling batch.");
+                    _logger?.LogInformation("ExhaustiveShuffle exhausted after {Count} unique assets in batch", list.Count);
                     break;
                 }
             }
+
             if (list.Count == 0) return await _pool.GetAssets(25);
             return list;
         }
