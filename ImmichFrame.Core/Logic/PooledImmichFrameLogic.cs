@@ -55,7 +55,7 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
 
         _exhaustiveStrategy = new ExhaustiveRotationStrategy<AssetResponseDto>(CandidatesProvider);
 
-        _logger?.LogInformation("PooledImmichFrameLogic initialized. ExhaustiveShuffle={Flag}, Pool={Pool}",
+        _logger?.LogDebug("PooledImmichFrameLogic initialized. ExhaustiveShuffle={Flag}, Pool={Pool}",
             _generalSettings.ExhaustiveShuffle, _pool.GetType().Name);
     }
 
@@ -97,23 +97,23 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
             try
             {
                 var asset = _exhaustiveStrategy.Next(_rotationKey);
-                _logger?.LogInformation("ExhaustiveShuffle selected asset {AssetId}", asset.Id);
+                _logger?.LogDebug("ExhaustiveShuffle selected asset {AssetId}", asset.Id);
                 return asset;
             }
             catch (InvalidOperationException)
             {
-                _logger?.LogInformation("ExhaustiveShuffle exhausted, falling back to pool random.");
+                _logger?.LogDebug("ExhaustiveShuffle exhausted, falling back to pool random.");
                 return (await _pool.GetAssets(1)).FirstOrDefault();
             }
         }
 
         if (_generalSettings.ExhaustiveShuffle && isAllAssets)
         {
-            _logger?.LogInformation("ExhaustiveShuffle requested, but AllAssetsPool delivers SearchRandom → falling back.");
+            _logger?.LogDebug("ExhaustiveShuffle requested, but AllAssetsPool delivers SearchRandom → falling back.");
         }
 
         var random = (await _pool.GetAssets(1)).FirstOrDefault();
-        _logger?.LogInformation("Default shuffle selected asset {AssetId}", random?.Id);
+        _logger?.LogDebug("Default shuffle selected asset {AssetId}", random?.Id);
         return random;
     }
 
@@ -151,7 +151,7 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
             if (total <= 25 && byId.Count == total) break;
         }
 
-        _logger?.LogInformation("Collected {Collected}/{Total} unique candidates", byId.Count, total);
+        _logger?.LogDebug("Collected {Collected}/{Total} unique candidates", byId.Count, total);
         return byId.Values.ToList();
     }
 
@@ -166,7 +166,7 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
             if (candidates.Count == 0)
             {
                 var fallback = await _pool.GetAssets(25);
-                _logger?.LogInformation("Returning random fallback batch of {Count} assets", fallback.Count());
+                _logger?.LogDebug("Returning random fallback batch of {Count} assets", fallback.Count());
                 return fallback;
             }
 
@@ -180,18 +180,18 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
                 foreach (var a in candidates)
                 {
                     batch.Add(a);
-                    _logger?.LogInformation("Batch ExhaustiveShuffle selected asset {AssetId}", a.Id);
+                    _logger?.LogDebug("Batch ExhaustiveShuffle selected asset {AssetId}", a.Id);
                     if (batch.Count >= 25) break;
                 }
             }
 
-            _logger?.LogInformation("Returning batch with {Count} items (unique base {Unique})", batch.Count, candidates.Count);
+            _logger?.LogDebug("Returning batch with {Count} items (unique base {Unique})", batch.Count, candidates.Count);
             return batch;
         }
         else
         {
             var randomBatch = await _pool.GetAssets(25);
-            _logger?.LogInformation("Returning random batch of {Count} assets", randomBatch.Count());
+            _logger?.LogDebug("Returning random batch of {Count} assets", randomBatch.Count());
             return randomBatch;
         }
     }
@@ -220,11 +220,11 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
                 {
                     var fs = File.OpenRead(file);
                     var ex = Path.GetExtension(file);
-                    _logger?.LogInformation("Serving cached image for {AssetId}", id);
+                    _logger?.LogDebug("Serving cached image for {AssetId}", id);
                     return (Path.GetFileName(file), $"image/{ex}", fs);
                 }
 
-                _logger?.LogInformation("Cached image expired for {AssetId}, deleting.", id);
+                _logger?.LogDebug("Cached image expired for {AssetId}, deleting.", id);
                 File.Delete(file);
             }
         }
@@ -251,17 +251,17 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
             var fs = File.Create(filePath);
             await stream.CopyToAsync(fs);
             fs.Position = 0;
-            _logger?.LogInformation("Downloaded and cached new image {AssetId}", id);
+            _logger?.LogDebug("Downloaded and cached new image {AssetId}", id);
             return (Path.GetFileName(filePath), contentType, fs);
         }
 
-        _logger?.LogInformation("Serving streamed image for {AssetId}", id);
+        _logger?.LogDebug("Serving streamed image for {AssetId}", id);
         return (fileName, contentType, data.Stream);
     }
 
     public Task SendWebhookNotification(IWebhookNotification notification)
     {
-        _logger?.LogInformation("Sending webhook notification to {Webhook}", _generalSettings.Webhook);
+        _logger?.LogDebug("Sending webhook notification to {Webhook}", _generalSettings.Webhook);
         return WebhookHelper.SendWebhookNotification(notification, _generalSettings.Webhook);
     }
 
