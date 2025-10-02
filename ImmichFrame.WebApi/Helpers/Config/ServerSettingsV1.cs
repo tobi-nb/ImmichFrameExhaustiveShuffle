@@ -116,5 +116,6 @@ public class ServerSettingsV1Adapter(ServerSettingsV1 _delegate) : IServerSettin
         public bool ImageFill => _delegate.ImageFill;
         public string Layout => _delegate.Layout;
         public string Language => _delegate.Language;
+		public bool ExhaustiveShuffle => _delegate.ExhaustiveShuffle;
     }
 }
