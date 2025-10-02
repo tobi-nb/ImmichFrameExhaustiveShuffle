@@ -77,23 +77,21 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic
 
 	public async Task<AssetResponseDto?> GetNextAsset()
 	{
-		_logger?.LogInformation("ExhaustiveShuffle={flag}, poolType={type}", _generalSettings.ExhaustiveShuffle, _pool.GetType().Name);
+		var isAllAssets = _pool.GetType().Name.Contains("AllAssetsPool", StringComparison.OrdinalIgnoreCase);
 
-		if (_generalSettings.ExhaustiveShuffle)
+		if (_generalSettings.ExhaustiveShuffle && !isAllAssets)
 		{
-			try
-			{
-				return _exhaustiveStrategy.Next(_rotationKey);
-			}
-			catch (InvalidOperationException)
-			{
-				return (await _pool.GetAssets(1)).FirstOrDefault();
-			}
+			try { return _exhaustiveStrategy.Next(_rotationKey); }
+			catch (InvalidOperationException) { return (await _pool.GetAssets(1)).FirstOrDefault(); }
 		}
-		else
+
+		if (_generalSettings.ExhaustiveShuffle && isAllAssets)
 		{
-			return (await _pool.GetAssets(1)).FirstOrDefault();
+			// _logger?.LogInformation(...);  // ← ENTFERNEN
+			Console.WriteLine("[ImmichFrame] ExhaustiveShuffle requested, but AllAssetsPool delivers SearchRandom → falling back to random.");
 		}
+
+		return (await _pool.GetAssets(1)).FirstOrDefault();
 	}
 
 	public async Task<IEnumerable<AssetResponseDto>> GetAssets()
